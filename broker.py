@@ -25,10 +25,13 @@ async def leer_longitud(reader):
             return None
         b = byte[0] # obtener solo el valor numerico del byte
         longitud += (b & 0x7f) * multiplicador # 0x7f es 127, y 127 es el mayor valor que se puede obtener en 7 bits 
+        
 
         if b & 0x80 == 0: # si el bit mas significativo es 0, es el ultimo byte
             break
         multiplicador *= 128 # multiplica por 128 para obtener el valor del siguiente byte 
+
+        print("Valor del b: ", b)
 
         if multiplicador > 128 * 128 * 128: # si el multiplicador es mayor a 128*128*128, es un paquete invalido
             return None
@@ -64,7 +67,7 @@ async def manejar_cliente(reader, writer):
             #Se muestra en consola lo que llega del cliente
             print(f" -> Paquete: {nombre} | flags: {flags} | longitud: {longitud} bytes")
             print(f"    Bytes del resto (hex): {resto.hex()}")
-#   except Exception as e:
+    except Exception as e:
         print(f"[!] Error con cliente {direccion}: {e}")
 
     finally:
