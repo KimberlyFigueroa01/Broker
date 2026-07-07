@@ -34,8 +34,13 @@ async def leer_longitud(reader):
 
 # ─────────────────────────────────────────────
 async def procesar_connect(resto, writer):
-    pos = 10  # salta los 10 bytes fijos del Variable Header
+   
 
+    keep_alive = (resto[8] << 8) | resto[9]
+    print(f"    Keep Alive: {keep_alive} segundos")
+
+    pos = 10  # salta los 10 bytes fijos del Variable Header
+    
     # leer longitud del Client ID (2 bytes)
     largo_id = (resto[pos] << 8) | resto[pos + 1]
     pos += 2
@@ -54,16 +59,16 @@ async def procesar_connect(resto, writer):
             pass
 
     # guardar nuevo cliente
-    clientes[client_id] = {'writer': writer, 'topics': []}
+    clientes[client_id] = {'writer': writer, 'topics': [], 'keep_alive': keep_alive}
     print(f"    Clientes conectados: {list(clientes.keys())}")
 
     # enviar CONNACK
     connack = bytes([0x20, 0x02, 0x00, 0x00])
     writer.write(connack)
     await writer.drain()
-    print(f"    ✅ CONNACK enviado a '{client_id}'")
+    print(f"CONNACK enviado a '{client_id}'")
 
-    return client_id
+    return client_id, keep_alive
 
 # ─────────────────────────────────────────────
 async def procesar_subscribe(resto, writer, client_id):
@@ -96,7 +101,7 @@ async def procesar_subscribe(resto, writer, client_id):
     suback += bytes([0x00] * len(topics_suscritos))
     writer.write(suback)
     await writer.drain()
-    print(f"    ✅ SUBACK enviado a '{client_id}'")
+    print(f"     SUBACK enviado a '{client_id}'")
 
 # ─────────────────────────────────────────────
 async def procesar_publish(resto, flags):
@@ -140,9 +145,9 @@ async def procesar_publish(resto, flags):
                 print(f"    ⚠️  Error reenviando a '{cid}': {e}")
 
     if enviado_a:
-        print(f"    ✅ Reenviado a: {enviado_a}")
+        print(f"     Reenviado a: {enviado_a}")
     else:
-        print(f"    ⚠️  Nadie suscrito a '{topic}'")
+        print(f"      Nadie suscrito a '{topic}'")
 
 # ─────────────────────────────────────────────
 async def manejar_cliente(reader, writer):
@@ -150,11 +155,19 @@ async def manejar_cliente(reader, writer):
     print(f"\n[+] Cliente conectado desde {direccion}")
 
     client_id = None
+    timeout_actual = 30 #tiempo de gracia antes de que llegue el primer CONNECT
+    motivo_desconexion = "desconocido"
 
     try:
         while True:
-            primer_byte = await reader.read(1)
+            try:
+                primer_byte = await asyncio.wait_for(reader.read(1), timeout=timeout_actual)
+            except asyncio.TimeoutError:
+                motivo_desconexion = "timeout"
+                break
+
             if not primer_byte:
+                motivo_desconexion = "cierre_tcp"
                 break
 
             tipo  = primer_byte[0] >> 4
@@ -172,7 +185,8 @@ async def manejar_cliente(reader, writer):
             print(f" -> Paquete: {nombre} | flags: {flags} | longitud: {longitud} bytes")
 
             if tipo == 1:    # CONNECT
-                client_id = await procesar_connect(resto, writer)
+                client_id, keep_alive = await procesar_connect(resto, writer)
+                timeout_actual = keep_alive * 1.5 if keep_alive > 0 else None
 
             elif tipo == 8:  # SUBSCRIBE
                 await procesar_subscribe(resto, writer, client_id)
@@ -184,9 +198,10 @@ async def manejar_cliente(reader, writer):
                 # responder PINGRESP para mantener la conexión viva
                 writer.write(bytes([0xD0, 0x00]))
                 await writer.drain()
-                print(f"    ✅ PINGRESP enviado a '{client_id}'")
+                print(f"     PINGRESP enviado a '{client_id}'")
 
             elif tipo == 14: # DISCONNECT
+                motivo_desconexion = "desconexión_limpia"
                 print(f"    Cliente '{client_id}' se desconectó limpiamente")
                 break
 
@@ -194,9 +209,19 @@ async def manejar_cliente(reader, writer):
                 print(f"    Bytes (hex): {resto.hex()}")
 
     except Exception as e:
+        motivo_desconexion = "error"
         print(f"[!] Error con '{client_id}' {direccion}: {e}")
 
     finally:
+        mensajes = {
+            "desconexión_limpia": f"'{client_id}' se desconectó limpiamente (DISCONNECT)",
+            "desconocido":  f" '{client_id}' cerró el socket sin avisar (cierre TCP)",
+            "timeout": f"  '{client_id}' no respondió a tiempo — timeout de keep_alive ({timeout_actual}s)",
+            "cierre_tcp": f" '{client_id}' se desconectó por un error",
+            "error": f" '{client_id}' se desconectó por una razón no identificada"
+        }
+
+        print(f"[-] Desconectado: {direccion} | Motivo: {mensajes.get(motivo_desconexion, 'desconocido')}")
         if client_id and client_id in clientes:
             del clientes[client_id]
             print(f"    '{client_id}' eliminado del diccionario")
@@ -208,7 +233,7 @@ async def manejar_cliente(reader, writer):
 async def main():
     servidor = await asyncio.start_server(
         manejar_cliente,
-        '10.93.74.93',
+        '10.254.167.93',
         1883
     )
     direccion = servidor.sockets[0].getsockname()
