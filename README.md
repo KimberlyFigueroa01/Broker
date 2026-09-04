@@ -1,86 +1,138 @@
-# Broker
+# Broker MQTT seguro
 
-Se realiza un broker propio para un sistema MQTT
+Broker MQTT educativo implementado en Python con `asyncio`. El servidor acepta conexiones MQTT sobre TLS, administra clientes conectados y permite suscripciones y publicaciones básicas entre ellos.
 
-## Explicación del Código
+> Este proyecto tiene fines académicos y de experimentación. No sustituye a un broker MQTT de producción como Mosquitto, EMQX o HiveMQ.
 
-El código implementa un broker MQTT básico utilizando la biblioteca `asyncio` de Python. Este broker no es una implementación completa del protocolo MQTT, sino una versión simplificada que permite conectar clientes y leer paquetes MQTT para fines de demostración y aprendizaje.
+## Características
 
-### Componentes Principales:
+- Servidor asíncrono basado en la biblioteca estándar `asyncio`.
+- Comunicación cifrada mediante TLS en el puerto `8883`.
+- Gestión de conexiones por `client_id`.
+- Suscripciones a topics y reenvío de mensajes publicados.
+- Soporte básico para `CONNECT`, `CONNACK`, `PUBLISH`, `SUBSCRIBE`, `SUBACK`, `PINGREQ`, `PINGRESP` y `DISCONNECT`.
+- Control de `keep alive` y cierre de conexiones inactivas.
+- Generación local de certificados autofirmados para desarrollo.
 
-1. **Diccionario de Tipos MQTT (`TIPOS_MQTT`)**:
-   - Contiene los códigos numéricos de los tipos de paquetes MQTT estándar (CONNECT, PUBLISH, SUBSCRIBE, etc.) y sus nombres correspondientes para mostrar en consola.
+## Requisitos
 
-2. **Diccionario de Clientes (`clientes`)**:
-   - Un diccionario vacío inicialmente destinado a almacenar información sobre los clientes conectados. En esta implementación básica, no se utiliza para gestionar suscripciones o publicaciones.
+- Python 3.9 o superior.
+- `pip`.
+- Un cliente MQTT, como Mosquitto, MQTT Explorer o una aplicación basada en `paho-mqtt`.
 
-3. **Función `leer_longitud(reader)`**:
-   - Lee la longitud variable del paquete MQTT según el protocolo. El protocolo MQTT utiliza una codificación variable donde cada byte tiene 7 bits de datos y 1 bit de continuación.
-   - Calcula la longitud total del paquete leyendo bytes hasta que el bit de continuación sea 0.
-   - Retorna `None` si hay un error o si el paquete es inválido.
+La única dependencia externa se encuentra en [`requirements.txt`](requirements.txt):
 
-4. **Función `manejar_cliente(reader, writer)`**:
-   - Maneja cada conexión de cliente de forma asíncrona.
-   - Lee el primer byte del paquete para determinar el tipo de paquete y los flags.
-   - Lee la longitud del paquete usando `leer_longitud`.
-   - Lee el resto del paquete.
-   - Imprime información sobre el paquete recibido (tipo, flags, longitud y bytes en hexadecimal).
-   - Cierra la conexión cuando el cliente se desconecta o hay un error.
+```text
+cryptography==47.0.0
+```
 
-5. **Función `main()`**:
-   - Inicia un servidor asíncrono que escucha en todas las interfaces de red (`0.0.0.0`) en el puerto estándar de MQTT (1883).
-   - Llama a `manejar_cliente` para cada nueva conexión.
-   - Mantiene el servidor corriendo indefinidamente.
+## Instalación
 
-### Limitaciones:
-- No implementa la lógica completa de MQTT (no maneja suscripciones, publicaciones, QoS, etc.).
-- Solo lee y registra paquetes; no responde a los clientes.
-- No gestiona el estado de las conexiones ni las sesiones.
-- Es útil para inspeccionar tráfico MQTT o como base para una implementación más completa.
+Desde la raíz del proyecto:
 
-## Cómo Ejecutar el Código
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
 
-### Requisitos Previos:
-- Python 3.7 o superior instalado en el sistema.
-- No se requieren bibliotecas externas adicionales, ya que utiliza solo `asyncio` que viene incluido con Python.
+En Linux o macOS, activa el entorno con:
 
-### Pasos para Ejecutar:
+```bash
+source .venv/bin/activate
+```
 
-1. **Navegar al Directorio del Proyecto**:
-   - Abre una terminal o línea de comandos.
-   - Navega al directorio donde se encuentra el archivo `broker.py`:
-     ```
-     cd c:\Users\Kimberly Figueroa\Documents\SEMILLERO\Broker\Broker
-     ```
+## Certificados TLS
 
-2. **Ejecutar el Broker**:
-   - Ejecuta el script con Python:
-     ```
-     python broker.py
-     ```
-   - O si tienes Python 3 específicamente:
-     ```
-     python3 broker.py
-     ```
+El broker carga los archivos desde la carpeta `certs/`:
 
-3. **Verificar que el Broker Está Ejecutándose**:
-   - Deberías ver un mensaje en la consola indicando que el broker se inició:
-     ```
-     [*] Broker iniciado en ('0.0.0.0', 1883)
-     [*] Esperando conexiones...
-     ```
+```text
+certs/
+├── cert.pem
+└── key.pem
+```
 
-4. **Conectar un Cliente MQTT**:
-   - Usa un cliente MQTT como `mosquitto_pub` o `mosquitto_sub` (de Mosquitto), o cualquier biblioteca MQTT en Python (como `paho-mqtt`).
-   - Ejemplo con `mosquitto_pub` para publicar un mensaje:
-     ```
-     mosquitto_pub -h localhost -t "test/topic" -m "Hola Mundo"
-     ```
-   - El broker debería mostrar información sobre los paquetes recibidos en la consola.
+Para generarlos en Windows:
 
-5. **Detener el Broker**:
-   - Presiona `Ctrl + C` en la terminal para detener el servidor.
+```powershell
+Set-Location certs
+python ..\generar_cert.py
+Set-Location ..
+```
 
-### Notas:
-- Asegúrate de que el puerto 1883 no esté siendo usado por otro servicio (como un broker MQTT real).
-- Este broker es para fines educativos; para producción, usa un broker MQTT completo como Mosquitto o HiveMQ.
+Para Linux o macOS:
+
+```bash
+cd certs
+python ../generar_cert.py
+cd ..
+```
+
+Los archivos `.pem` son material sensible y están excluidos mediante `.gitignore`. No deben publicarse ni incorporarse al repositorio. Los certificados generados por este script son autofirmados y solo deben utilizarse en entornos de desarrollo.
+
+## Ejecución
+
+Con el entorno virtual activo y los certificados creados:
+
+```powershell
+python broker.py
+```
+
+El broker escuchará en todas las interfaces de red mediante TLS:
+
+```text
+[*] Broker iniciado en ('0.0.0.0', 8883)
+[*] Esperando conexiones...
+```
+
+Detén el proceso con `Ctrl+C`.
+
+## Prueba con Mosquitto
+
+Como el certificado es autofirmado, los clientes deben indicar el certificado durante las pruebas locales.
+
+En una terminal, inicia un suscriptor:
+
+```powershell
+mosquitto_sub -h localhost -p 8883 --cafile certs/cert.pem -t "test/topic" -d
+```
+
+En otra terminal, publica un mensaje:
+
+```powershell
+mosquitto_pub -h localhost -p 8883 --cafile certs/cert.pem -t "test/topic" -m "Hola MQTT" -d
+```
+
+El suscriptor debería recibir el mensaje publicado.
+
+## Estructura del proyecto
+
+```text
+.
+├── broker.py          # Servidor MQTT asíncrono
+├── generar_cert.py    # Generador de certificados autofirmados
+├── requirements.txt   # Dependencias externas fijadas
+├── certs/             # Certificados locales, excluidos de Git
+└── README.md
+```
+
+## Limitaciones conocidas
+
+Esta es una implementación simplificada del protocolo MQTT. Actualmente no incluye:
+
+- Autenticación de usuarios ni autorización por topic.
+- Persistencia de sesiones, mensajes retenidos o almacenamiento durable.
+- QoS completo, retransmisiones ni manejo de `Packet Identifier` en el reenvío.
+- Soporte para topics con comodines (`+` y `#`).
+- Validación exhaustiva de todos los paquetes y flags definidos por MQTT.
+- Alta disponibilidad, métricas, límites de conexiones o configuración externa.
+
+Para un entorno productivo se debe utilizar un broker MQTT especializado o ampliar esta implementación con autenticación, autorización, validación de protocolo, gestión de secretos, observabilidad y pruebas de integración.
+
+## Seguridad del repositorio
+
+- No confirmar archivos `.pem`, claves privadas, contraseñas ni tokens.
+- Generar certificados diferentes para cada entorno.
+- Considerar comprometida cualquier clave que haya sido publicada en el historial Git y reemplazarla, aunque después se haya eliminado.
+- Usar certificados emitidos por una autoridad de confianza en producción.

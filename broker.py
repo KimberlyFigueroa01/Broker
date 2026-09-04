@@ -1,5 +1,6 @@
 from asyncio import constants
 import asyncio
+from pathlib import Path
 import ssl
 
 
@@ -19,7 +20,11 @@ TIPOS_MQTT = {
 clientes = {}
 
 contexto_ssl = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-contexto_ssl.load_cert_chain(certfile="cert.pem", keyfile="key.pem")
+ruta_certificados = Path(__file__).resolve().parent / "certs"
+contexto_ssl.load_cert_chain(
+    certfile=ruta_certificados / "cert.pem",
+    keyfile=ruta_certificados / "key.pem",
+)
 # ─────────────────────────────────────────────
 async def leer_longitud(reader):
     longitud = 0
@@ -238,7 +243,7 @@ async def manejar_cliente(reader, writer):
 async def main():
     servidor = await asyncio.start_server(
         manejar_cliente,
-        '192.168.18.9',
+        '0.0.0.0',
         8883,
         ssl=contexto_ssl
     )
