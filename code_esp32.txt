@@ -1,0 +1,84 @@
+import network
+import time
+from umqtt.simple import MQTTClient
+from machine import Pin
+import ssl 
+
+# ─────────────────────────────────────────────
+# 1. Configuración de Red WiFi
+# ─────────────────────────────────────────────
+SSID = "ESP32"          # Tu red WiFi o zona Wi-Fi del celular
+PASSWORD = "123456789"
+
+# ─────────────────────────────────────────────
+# 2. Configuración de Ngrok (MODIFICA ESTOS DOS)
+# ─────────────────────────────────────────────
+# host y puerto exactos que se muestran en la ventana de Ngrok:
+MQTT_SERVER = "8.tcp.ngrok.io"  # subdominio de Ngrok (sin 'tcp://')
+MQTT_PORT   = 25566            # número de puerto que te dio Ngrok
+
+MQTT_TOPIC  = b"sala1/dht11"
+
+# LED azul en pin 21
+led_azul = Pin(21, Pin.OUT)
+
+# ─────────────────────────────────────────────
+# 3. Conexión WiFi
+# ─────────────────────────────────────────────
+wlan = network.WLAN(network.STA_IF)
+wlan.active(False)
+time.sleep(0.5)
+wlan.active(True)
+wlan.disconnect()
+time.sleep(0.5)
+
+print(f"Buscando red: '{SSID}'...")
+wlan.connect(SSID, PASSWORD)
+intentos = 0
+while not wlan.isconnected() and intentos < 15:
+    time.sleep(1)
+    print(".", end="")
+    intentos += 1
+    
+if not wlan.isconnected():
+    print("\n❌ Error: No se pudo conectar al WiFi.")
+    raise SystemExit("Verifica la red y vuelve a ejecutar.")
+
+print("\n✅ WiFi conectado:", wlan.ifconfig())
+
+# ─────────────────────────────────────────────
+# 4. Callback al recibir mensaje
+# ─────────────────────────────────────────────
+def callback(topic, msg):
+    mensaje = msg.decode()
+    print("📥 Mensaje recibido:", mensaje)
+    try:
+        temp, hum = mensaje.split(",")
+        print(f"🌡 Temp: {temp}°C, 💧 Hum: {hum}%")
+        led_azul.on()
+        time.sleep(2)
+        led_azul.off()
+    except:
+        print("⚠️ Mensaje recibido pero con formato distinto:", mensaje)
+
+# ─────────────────────────────────────────────
+# 5. Conexión al Broker MQTT vía Ngrok con SSL
+# ─────────────────────────────────────────────
+print(f"Conectando al Broker en {MQTT_SERVER}:{MQTT_PORT}...")
+
+client = MQTTClient(
+    client_id="ESP32_sub", 
+    server=MQTT_SERVER, 
+    port=MQTT_PORT, 
+    ssl=True, 
+    ssl_params={"cert_reqs": ssl.CERT_NONE}
+)
+client.set_callback(callback)
+client.connect()
+client.subscribe(MQTT_TOPIC)
+print("✅ Suscrito exitosamente al topic:", MQTT_TOPIC)
+print("Esperando mensajes...")
+
+while True:
+    client.wait_msg()  # Espera mensajes entrantes
+

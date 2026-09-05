@@ -106,11 +106,57 @@ mosquitto_pub -h localhost -p 8883 --cafile certs/cert.pem -t "test/topic" -m "H
 
 El suscriptor debería recibir el mensaje publicado.
 
+## Despliegue y Conexión Remota (ESP32 con Ngrok)
+
+Para permitir que dispositivos externos (como microcontroladores **ESP32** en redes Wi-Fi remotas o datos móviles) se conecten al broker sin estar en la misma red local (LAN), se expone el puerto TCP seguro mediante un túnel con **Ngrok**.
+
+### 1. Iniciar el Broker
+En una terminal:
+```powershell
+python broker.py
+```
+
+### 2. Abrir el Túnel TCP
+En una segunda terminal:
+```powershell
+ngrok tcp 8883
+```
+
+Ngrok asignará un endpoint público similar a:
+```text
+Forwarding    tcp://8.tcp.ngrok.io:25566 -> localhost:8883
+```
+
+### 3. Conectar el ESP32 (MicroPython)
+En el archivo [`code_esp32.py`](code_esp32.py) se encuentra el cliente para ESP32 usando `umqtt.simple` y `ssl`:
+
+1. Configura el servidor y puerto asignados por Ngrok:
+   ```python
+   MQTT_SERVER = "8.tcp.ngrok.io"  # Host público entregado por Ngrok
+   MQTT_PORT   = 25566            # Puerto público asignado por Ngrok
+   MQTT_TOPIC  = b"sala1/dht11"
+   ```
+2. La conexión se establece con cifrado TLS omitiendo la validación estricta de la CA para certificados autofirmados:
+   ```python
+   client = MQTTClient(
+       client_id="ESP32_sub",
+       server=MQTT_SERVER,
+       port=MQTT_PORT,
+       ssl=True,
+       ssl_params={"cert_reqs": ssl.CERT_NONE}
+   )
+   client.set_callback(callback)
+   client.connect()
+   client.subscribe(MQTT_TOPIC)
+   ```
+3. Al ejecutar el script en el ESP32 (mediante Thonny u otra herramienta), el dispositivo se suscribirá y recibirá los mensajes publicados en el broker a través de Internet.
+
 ## Estructura del proyecto
 
 ```text
 .
-├── broker.py          # Servidor MQTT asíncrono
+├── broker.py          # Servidor MQTT asíncrono sobre TLS
+├── code_esp32.py      # Cliente MicroPython para ESP32
 ├── generar_cert.py    # Generador de certificados autofirmados
 ├── requirements.txt   # Dependencias externas fijadas
 ├── certs/             # Certificados locales, excluidos de Git
